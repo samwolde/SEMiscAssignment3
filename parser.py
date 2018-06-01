@@ -1,136 +1,187 @@
 import enum
 
+
 class NodeType(enum.Enum):
-    Cond = 0
-    Loop = 1
-    Normal = 2
-    Start = 3
-    Exit = 4
-    DoLoop = 5
-    MergeNode = 6
+    Start = 0
+    Exit = 1
+    Cond = 2
+    Loop = 3
+    Normal = 4
 
-
-class Parser:
-    graph = None
-    nodes = {}
-
-    def __init__(self):
-        f = open('parser.py')
-        self.createGraph(f.read())
-        pass
-
-    def createGraph(self, code):
-        codeLines = code.split('\n')
-
-        counter = 1
-        parentNode = None
-        mergeParentNode = None
-
-        for line in codeLines:
-            line = line.strip()
-            if self.graph is None:
-                nod = Node(counter, None, line)
-                self.graph = nod
-
-            else:
-                if line.startswith('if'):
-                    mNod = Node(counter, parent, None, NodeType.MergeNode)
-                    mergeParentNode = mNod
-                    counter += 1
-
-                    nod = Node(counter, parent, line, NodeType.Cond)
-                    mNod.addChild(nod)
-                    parentNode = nod
-
-                elif line.startswith('else if') or line.startswith('else'):
-                    mNod = Node(counter, parent, None, NodeType.MergeNode)
-                    mergeParentNode = mNod
-                    counter += 1
-
-                    nod = Node(counter, parent, line, NodeType.Cond)
-                    mNod.addChild(nod)
-                    parentNode = nod
-
-                elif line.startswith('for') or line.startswith('while'):
-                    mNod = Node(counter, parent, None, NodeType.MergeNode)
-                    counter += 1
-
-                    nod = Node(counter, parent, line, NodeType.Loop)
-                    mNod.addChild(nod)
-
-                    self.graph.addChild(Node(counter, parent, line, NodeType.Loop))
-
-                elif line.startswith('do'):
-                    mNod = Node(counter, parent,None, NodeType.MergeNode)
-                    self.graph.setNextNode(mNod)
-                    counter += 1
-
-                    nod = Node(counter, parent, line, NodeType.DoLoop)
-                    mNod.addChild(nod)
-
-                    self.graph.addChild(Node(counter, parent, line, NodeType.DoLoop))
-
-                elif line.startswith('continue'):
-                    self.graph.addChild(Node(counter, parent, line, NodeType.Normal))
-
-                elif line.startswith('break'):
-                    self.graph.addChild(Node(counter, parent, line, NodeType.Normal))
-
-                else:
-                    self.graph.addChild(Node(counter, parent, line, NodeType.Normal))
-
-            parent = nod
-
-            self.nodes[counter] = nod
-            self.graph.addChild(nod)
-
-            counter += 1
-
-Parser()
 
 class Node:
     id = None
     content = None
-    explored = False
-    children = {}
-    parent = None
     nextNode = None
     previousNode = None
+    currentMergeNode = None
+    parentMergeNode = None
     nodeType = NodeType.Normal
     mergeNode = False
+    children = []
+    visited = False
 
-    def __init__(self, id, parent, previousNode, content, nodeType, mergeNode=False):
-        self.explored = False
+    def __init__(self, id, content, previousNode, currentMergeNode, parentMergeNode, nodeType=NodeType.Normal,
+                 mergeNode=False):
         self.id = id
-        self.parent = parent
-        self.nodeType = nodeType
         self.content = content
-        self.mergeNode = mergeNode
         self.previousNode = previousNode
+        self.currentMergeNode = currentMergeNode
+        self.parentMergeNode = parentMergeNode
+        self.nodeType = nodeType
+        self.mergeNode = mergeNode
 
-    def addChild(self, child):
-        self.children[child.id] = child
+    def addChild(self, node):
+        self.children.append(node)
 
-    def isExplored(self):
-        return self.explored
+    def isMergeNode(self):
+        return self.mergeNode
 
-    def setExplored(self, explored):
-        self.explored = explored
+    def isVisited(self):
+        return self.visited
 
-    def setNextNode(self, nextNode):
-        self.nextNode = nextNode
-#
-# class MergeNode:
-#     children = {}
-#     parent = None
-#     nextNode = None
-#
-#     def __init__(self, id, parent):
-#         self.parent = parent
-#         self.id = id
-#
-#     def addChild(self, node):
-#         self.children[node.id] = node
-#
-#     def setNextNode(self, node):
-#         self.nextNode = node
+    def setVisited(self, visited=True):
+        self.visited = visited
+
+    def __str__(self):
+        return 'ID: ' + str(self.id) + '\nType: ' + str(self.nodeType) + '\nContent: '+str(self.content)
+
+
+class CodeParser:
+    graph = None
+
+    def parseCode(self, code: str):
+        counter = 1
+
+        tempCurrentMergeNode = None
+        tempParentMergeNode = None
+        tempPreviousNode = None
+
+        self.graph = Node(counter, "Start", None, None, None, NodeType.Start, False)
+        counter += 1
+        tempPreviousNode = self.graph
+
+        exitNode = Node(counter, "Exit", None, None, None, NodeType.Exit, False)
+        counter += 1
+
+        lines = code.strip().split('\n')
+
+        for i in range(len(lines)):
+            line = lines[i].strip()
+
+            if line == '':
+                continue
+
+
+            if line.startswith('if'):
+                mNode = Node(counter, "Conditional merge point", tempPreviousNode, tempCurrentMergeNode, tempParentMergeNode, NodeType.Cond,
+                             True)
+                counter += 1
+
+                tempParentMergeNode = tempCurrentMergeNode
+                tempCurrentMergeNode = mNode
+
+                curNode = Node(counter, line, tempPreviousNode, mNode, tempCurrentMergeNode, NodeType.Cond)
+                tempCurrentMergeNode.addChild(curNode)
+
+                tempPreviousNode.nextNode = mNode
+                tempPreviousNode = curNode
+
+            elif line.startswith('}') and (line.__contains__('else if') or line.__contains__('else')):
+                curNode = Node(counter, line, tempPreviousNode, tempCurrentMergeNode, tempParentMergeNode,
+                               NodeType.Cond)
+
+                tempCurrentMergeNode.addChild(curNode)
+
+                tempPreviousNode = curNode
+
+            elif line.startswith('}'):
+                if i + 1 == len(lines):
+                    tempCurrentMergeNode.nextNode = exitNode
+
+                # make the next node of the previous conditional the mergeNode's next node
+                tempPreviousNode.nextNode = tempCurrentMergeNode.nextNode
+                tempPreviousNode = tempCurrentMergeNode
+
+                tempCurrentMergeNode = tempParentMergeNode
+                tempParentMergeNode = tempCurrentMergeNode.parentMergeNode if tempCurrentMergeNode is not None else None
+
+            else:
+                curNode = Node(counter, line, tempPreviousNode, tempCurrentMergeNode, tempParentMergeNode,
+                               NodeType.Normal)
+
+                curNode.nextNode = exitNode
+
+                tempPreviousNode.nextNode = curNode
+
+                tempPreviousNode = curNode
+
+            counter += 1
+
+    def changeConditionalNextNode(self, mergeNode, gNextNode):
+        for node in mergeNode.children:
+            nextNode = node.nextNode
+
+            while nextNode is not None:
+                nextNode = node.nextNode
+                #print(nextNode)
+
+            node.nextNode = gNextNode
+
+    def traverse(self):
+        continueTraverse = True
+
+        paths = []
+        while continueTraverse:
+            nextNode = self.graph
+            path = [nextNode]
+            while True:
+                if nextNode.isMergeNode():
+                    notVisited = 0
+                    for node in nextNode.children:
+                        if not node.isVisited():
+                            notVisited += 1
+                            nextNode = node
+                            node.setVisited()
+                            break
+
+                    if notVisited == 0:
+                        continueTraverse = False
+                        break
+
+                elif nextNode.nodeType == NodeType.Exit:
+                    break
+
+                else:
+                    nextNode = nextNode.nextNode
+
+                path.append(nextNode)
+
+            if len(path) > 2:
+                paths.append(path)
+
+        return paths
+
+    def printPath(self, paths):
+        for path in paths:
+            for node in path:
+                print("Node: ", node.id, " - Content: ", node.content)
+
+            print("\n")
+
+# sample code
+c = '''
+    if(a>0){
+        System.out.println("Hi");
+    } else if{
+        System.out.println("Hello");
+    } else{
+        System.out.println("Good Bye");
+        System.out.println("Bye");
+    }
+'''
+par = CodeParser()
+
+par.parseCode(c)
+
+par.printPath(par.traverse())
